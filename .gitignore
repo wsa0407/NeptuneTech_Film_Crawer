@@ -1,0 +1,7 @@
+# 勿提交
+.env
+.venv/
+__pycache__/
+*.pyc
+*.db
+data/*.db

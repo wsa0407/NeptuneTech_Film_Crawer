@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sylicora-CRM</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div id="particle-bg" class="particle-bg" aria-hidden="true">
+    <canvas id="particle-canvas"></canvas>
+  </div>
+  <header class="header">
+    <div class="header-inner">
+      <div class="header-left">
+        <a href="{{ url_for('overview') }}" class="logo">SyliCora</a>
+      </div>
+      {% if session.get('logged_in') %}
+      <nav class="nav header-center">
+        <a href="{{ url_for('overview') }}" class="nav-link {% if section_key is defined and section_key == 'overview' %}active{% endif %}">线索总览</a>
+        <a href="{{ url_for('pending') }}" class="nav-link {% if section_key is defined and section_key == 'pending' %}active{% endif %}">待处理</a>
+        <a href="{{ url_for('following') }}" class="nav-link {% if section_key is defined and section_key == 'following' %}active{% endif %}">跟进中</a>
+        <a href="{{ url_for('converted') }}" class="nav-link {% if section_key is defined and section_key == 'converted' %}active{% endif %}">已转化</a>
+        <a href="{{ url_for('ignored') }}" class="nav-link {% if section_key is defined and section_key == 'ignored' %}active{% endif %}">已忽略</a>
+      </nav>
+      <div class="header-right">
+        <a href="{{ url_for('logout') }}" class="btn btn-outline">退出</a>
+      </div>
+      {% endif %}
+    </div>
+  </header>
+  <main class="main">
+    {% block content %}{% endblock %}
+  </main>
+  <script src="{{ url_for('static', filename='particles.js') }}"></script>
+</body>
+</html>

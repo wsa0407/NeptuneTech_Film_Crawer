@@ -1,0 +1,4 @@
+# 每行粘贴一个 Upwork 职位详情页链接（过完真人验证后在浏览器里复制）
+# 可选：同一行写 标题<Tab>链接 或 标题,链接
+# 示例：
+# https://www.upwork.com/freelance-jobs/apply/Video-Series-Creator_~022026170044277888904/

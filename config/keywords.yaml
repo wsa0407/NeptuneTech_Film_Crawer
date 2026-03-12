@@ -1,0 +1,45 @@
+# 统一关键词表 - 用于各平台搜索/过滤
+# 见 docs/TECH_DESIGN.md 第二节
+
+upwork:
+  # Upwork 搜索：多组短关键词分别搜索后合并去重（Actor 使用 searchQuery 单条）
+  search_queries:
+    # 第一组：核心短剧类（竖屏、连续剧、微型）
+    - "AI Video Series"
+    - "AI Episodic Content"
+    - "AI Mini-series"
+    - "AI Storytelling"
+    - "AI Filmmaking"
+    - "Vertical AI Video / TikTok AI Series"
+    - "AI Script-to-Video"
+    # 第二组：漫画/二次元类
+    - "AI Motion Comic"
+    - "AI Animate Webtoon"
+    - "AI Animate Manga"
+    - "AI Anime Series"
+
+global:
+  short_form:
+    - Short Drama
+    - Short-form Drama
+    - Micro-drama
+    - Vertical Drama
+    - Mini-series
+    - ShortMax
+    - DramaBox
+  ai_aigc:
+    - AI
+    - AIGC
+    - Synthetic
+    - AI-generated footage
+    - AIGC integration
+    - Generative AI Video
+    - AI-native
+    - Character Consistency
+  roles:
+    - AIGC Video Creator
+    - AIGC Video Producer
+    - Short-form Video Producer
+    - Creative Editor
+    - Head of Content
+    - Content Acquisition

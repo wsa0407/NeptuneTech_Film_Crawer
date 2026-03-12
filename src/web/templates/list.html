@@ -1,0 +1,244 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="card{% if section_key == 'ignored' %} card-ignored{% endif %}">
+  <form class="filters" method="get" action="{{ url_for(section_key) }}">
+    <label>
+      发布时间
+      <select name="date">
+        <option value="all" {% if date_range == 'all' %}selected{% endif %}>全部</option>
+        <option value="today" {% if date_range == 'today' %}selected{% endif %}>今日</option>
+        <option value="7d" {% if date_range == '7d' %}selected{% endif %}>近 7 天</option>
+        <option value="30d" {% if date_range == '30d' %}selected{% endif %}>近 30 天</option>
+      </select>
+    </label>
+    {% if show_status_filter %}
+    <label>
+      状态
+      <select name="status">
+        <option value="" {% if not filter_status %}selected{% endif %}>全部</option>
+        {% for val, label in status_choices %}
+        <option value="{{ val }}" {% if filter_status == val %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endif %}
+    {% if show_keyword_search %}
+    <label>
+      关键词
+      <input type="text" name="q" value="{{ filter_q }}" placeholder="标题/描述模糊搜索" class="filter-input">
+    </label>
+    {% endif %}
+    <button type="submit" class="btn btn-primary">查询</button>
+    <a href="{{ url_for(section_key) }}" class="btn btn-secondary">重置</a>
+  </form>
+</div>
+
+<div class="card">
+  <p class="meta">每页 15 条 · 共 {{ total }} 条</p>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>发布时间</th>
+          <th>预算</th>
+          <th>标题</th>
+          {% if section_key == 'ignored' %}<th>忽略原因</th>{% else %}<th>核心描述</th>{% endif %}
+          <th>状态</th>
+          {% if show_actions %}<th>操作</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for lead in leads %}
+        <tr>
+          <td class="col-time">{{ lead.published_fmt }}</td>
+          <td class="col-budget">{{ lead.budget_signal or lead.salary_raw or '—' }}</td>
+          <td class="col-title"><a href="{{ url_for('lead_detail', lead_id=lead.id, next=return_to_list) }}">{% if lead.title %}{{ lead.title | safe }}{% else %}—{% endif %}</a></td>
+          {% if section_key == 'ignored' %}
+          <td class="core-desc core-desc-ignored" title="{{ lead.follow_up_notes or '' }}">{{ lead.follow_up_notes or '—' }}</td>
+          {% else %}
+          <td class="core-desc" title="{{ lead.core_desc or '' }}">{{ lead.core_desc or '—' }}</td>
+          {% endif %}
+          <td class="status-cell">
+            {% if can_edit_status and status_choices %}
+            <form method="post" action="{{ url_for('save_follow_up', lead_id=lead.id) }}" class="status-form" data-lead-id="{{ lead.id }}">
+              <input type="hidden" name="notes" value="{{ lead.follow_up_notes or '' }}">
+              <input type="hidden" name="next" value="{{ return_to_list }}">
+              <select
+                name="status"
+                class="status-select status-{{ lead.status }}"
+                data-original-status="{{ lead.status }}"
+                {% if section_key in ['pending', 'following'] %}data-ignore-with-reason{% endif %}
+                data-status-change-submit
+              >
+                {% for val, label in status_choices %}
+                <option value="{{ val }}" {% if lead.status == val %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </form>
+            {% else %}
+            <span class="status status-{{ lead.status }}">{{ lead.status_label }}</span>
+            {% endif %}
+          </td>
+          {% if show_actions %}
+          <td class="action-cell">
+            <span class="action-btns">
+              {% if section_key == 'ignored' %}
+              <form method="post" action="{{ url_for('save_follow_up', lead_id=lead.id) }}" class="inline-form" style="display:inline;">
+                <input type="hidden" name="status" value="pending">
+                <input type="hidden" name="notes" value="">
+                <input type="hidden" name="next" value="{{ return_to_list }}">
+                <button type="submit" class="btn btn-sm btn-revert">撤销</button>
+              </form>
+              {% endif %}
+              {% if lead.source_url %}
+              <a href="{{ lead.source_url }}" target="_blank" rel="noopener" class="btn btn-sm">详情</a>
+              {% else %}
+              <a href="{{ url_for('lead_detail', lead_id=lead.id, next=return_to_list) }}" class="btn btn-sm">详情</a>
+              {% endif %}
+            </span>
+          </td>
+          {% endif %}
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="{{ 6 if show_actions else 5 }}">
+            <div class="empty-state">
+              <div class="empty-state-icon" aria-hidden="true">📋</div>
+              <div class="empty-state-text">无相关线索</div>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="pagination">
+    <span class="pagination-info">共 {{ total }} 条，第 {{ page }}/{{ total_pages }} 页</span>
+    <nav class="pagination-nav" aria-label="分页">
+      {% if first_url %}
+      <a href="{{ first_url }}" class="pagination-link" title="首页">«</a>
+      <a href="{{ prev_url }}" class="pagination-link">上一页</a>
+      {% else %}
+      <span class="pagination-link disabled" aria-disabled="true">«</span>
+      <span class="pagination-link disabled" aria-disabled="true">上一页</span>
+      {% endif %}
+      {% for p, page_url in page_urls %}
+      {% if p == page %}
+      <span class="pagination-link current" aria-current="page">{{ p }}</span>
+      {% else %}
+      <a href="{{ page_url }}" class="pagination-link">{{ p }}</a>
+      {% endif %}
+      {% endfor %}
+      {% if next_url %}
+      <a href="{{ next_url }}" class="pagination-link">下一页</a>
+      <a href="{{ last_url }}" class="pagination-link" title="末页">»</a>
+      {% else %}
+      <span class="pagination-link disabled" aria-disabled="true">下一页</span>
+      <span class="pagination-link disabled" aria-disabled="true">»</span>
+      {% endif %}
+    </nav>
+  </div>
+</div>
+
+{% if section_key in ['pending', 'following'] and can_edit_status %}
+<div id="ignore-reason-modal" class="modal-overlay" role="dialog" aria-labelledby="ignore-modal-title" aria-modal="true" hidden>
+  <div class="modal-card">
+    <h3 id="ignore-modal-title" class="modal-title">填写已忽略原因</h3>
+    <form id="ignore-reason-form" class="modal-form">
+      <label>
+        原因 <span class="required">*</span>
+        <select id="ignore-reason-select" required>
+          <option value="">请选择</option>
+          {% for val, label in ignored_reason_choices %}
+          <option value="{{ val }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        补充说明（选填）
+        <textarea id="ignore-reason-extra" rows="3" placeholder="可补充具体原因"></textarea>
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" id="ignore-modal-cancel">取消</button>
+        <button type="submit" class="btn btn-primary" id="ignore-modal-confirm">确定</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+<script>
+(function() {
+  var modal = document.getElementById('ignore-reason-modal');
+  var ignoreSelect = modal ? modal.querySelector('#ignore-reason-select') : null;
+  var extraInput = modal ? modal.querySelector('#ignore-reason-extra') : null;
+  var formToSubmit = null;
+  var optionsByValue = {};
+  if (ignoreSelect) {
+    Array.prototype.forEach.call(ignoreSelect.options, function(opt) {
+      if (opt.value) optionsByValue[opt.value] = opt.text;
+    });
+  }
+  function openModal(form) {
+    formToSubmit = form;
+    if (ignoreSelect) ignoreSelect.value = '';
+    if (extraInput) extraInput.value = '';
+    if (modal) { modal.hidden = false; ignoreSelect && ignoreSelect.focus(); }
+  }
+  function closeModal() {
+    if (modal) modal.hidden = true;
+    formToSubmit = null;
+  }
+  document.querySelectorAll('.status-form select[data-status-change-submit]').forEach(function(sel) {
+    sel.addEventListener('change', function() {
+      if (this.hasAttribute('data-ignore-with-reason') && this.value === 'ignored' && modal) {
+        openModal(this.form);
+        return;
+      }
+      this.form.submit();
+    });
+  });
+  if (modal && document.getElementById('ignore-reason-form')) {
+    document.getElementById('ignore-reason-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      if (!formToSubmit || !ignoreSelect || !ignoreSelect.value) return;
+      var reasonText = optionsByValue[ignoreSelect.value] || ignoreSelect.value;
+      var extraText = (extraInput && extraInput.value) ? extraInput.value.trim() : '';
+      var notes = reasonText + (extraText ? '\n' + extraText : '');
+      var notesInput = formToSubmit.querySelector('input[name=notes]');
+      if (notesInput) notesInput.value = notes;
+      var statusSelect = formToSubmit.querySelector('select[name=status]');
+      if (statusSelect) statusSelect.value = 'ignored';
+      var f = formToSubmit;
+      closeModal();
+      f.submit();
+    });
+  }
+  if (document.getElementById('ignore-modal-cancel')) {
+    document.getElementById('ignore-modal-cancel').addEventListener('click', function() {
+      if (formToSubmit) {
+        var sel = formToSubmit.querySelector('[data-ignore-with-reason]');
+        if (sel) {
+          var orig = sel.getAttribute('data-original-status') || 'pending';
+          sel.value = orig;
+        }
+      }
+      closeModal();
+    });
+  }
+  if (modal) {
+    modal.addEventListener('click', function(e) {
+      if (e.target === modal) {
+        if (formToSubmit) {
+          var sel = formToSubmit.querySelector('[data-ignore-with-reason]');
+          if (sel) {
+            var orig = sel.getAttribute('data-original-status') || 'pending';
+            sel.value = orig;
+          }
+        }
+        closeModal();
+      }
+    });
+  }
+})();
+</script>
+{% endblock %}

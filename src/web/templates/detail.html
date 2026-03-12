@@ -1,0 +1,115 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="detail">
+  <p class="back"><a href="{{ return_to or url_for('overview') }}">← 返回列表</a></p>
+
+  <h1>{% if lead.title %}{{ lead.title | safe }}{% else %}—{% endif %}</h1>
+  <dl class="meta-list">
+    <dt>平台</dt><dd>{{ lead.platform or '—' }}</dd>
+    <dt>发布方</dt><dd>{{ lead.publisher or '—' }}</dd>
+    <dt>发布时间</dt><dd>{{ lead.published_fmt }}</dd>
+    <dt>抓取时间</dt><dd>{{ lead.crawled_fmt }}</dd>
+    <dt>预算</dt><dd>{{ lead.budget_signal or lead.salary_raw or '—' }}</dd>
+    <dt>核心描述</dt><dd class="core-desc">{{ lead.core_desc }}</dd>
+    {% if lead.source_url %}
+    <dt>直达链接</dt><dd><a href="{{ lead.source_url }}" target="_blank" rel="noopener">{{ lead.source_url }}</a></dd>
+    {% endif %}
+  </dl>
+
+  <section class="follow-up">
+    <h2>跟进</h2>
+    <form id="detail-follow-up-form" method="post" action="{{ url_for('save_follow_up', lead_id=lead.id) }}">
+      {% if return_to %}<input type="hidden" name="next" value="{{ return_to }}">{% endif %}
+      <label>状态
+        <select name="status" id="detail-status-select" data-original-status="{{ lead.follow_up.status }}">
+          {% for val, label in status_choices %}
+          <option value="{{ val }}" {% if lead.follow_up.status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>备注 <textarea name="notes" id="detail-notes" rows="4" placeholder="可选">{{ lead.follow_up.notes or '' }}</textarea></label>
+      {% if lead.follow_up.updated_at %}
+      <p class="updated">最后更新：{{ lead.follow_up.updated_at[:19] }}</p>
+      {% endif %}
+      <button type="submit" class="btn btn-primary">保存</button>
+    </form>
+  </section>
+</div>
+
+<div id="ignore-reason-modal" class="modal-overlay" role="dialog" aria-labelledby="ignore-modal-title" aria-modal="true" hidden>
+  <div class="modal-card">
+    <h3 id="ignore-modal-title" class="modal-title">填写已忽略原因</h3>
+    <form id="ignore-reason-form" class="modal-form">
+      <label>
+        原因 <span class="required">*</span>
+        <select id="ignore-reason-select" required>
+          <option value="">请选择</option>
+          {% for val, label in ignored_reason_choices %}
+          <option value="{{ val }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        补充说明（选填）
+        <textarea id="ignore-reason-extra" rows="3" placeholder="可补充具体原因"></textarea>
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" id="ignore-modal-cancel">取消</button>
+        <button type="submit" class="btn btn-primary" id="ignore-modal-confirm">确定</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+(function() {
+  var form = document.getElementById('detail-follow-up-form');
+  var modal = document.getElementById('ignore-reason-modal');
+  var ignoreSelect = modal ? modal.querySelector('#ignore-reason-select') : null;
+  var extraInput = modal ? modal.querySelector('#ignore-reason-extra') : null;
+  var statusSelect = form ? form.querySelector('#detail-status-select') : null;
+  var notesInput = form ? form.querySelector('#detail-notes') : null;
+  var optionsByValue = {};
+  if (ignoreSelect) {
+    Array.prototype.forEach.call(ignoreSelect.options, function(opt) {
+      if (opt.value) optionsByValue[opt.value] = opt.text;
+    });
+  }
+  function openModal() {
+    if (ignoreSelect) ignoreSelect.value = '';
+    if (extraInput) extraInput.value = '';
+    if (modal) { modal.hidden = false; ignoreSelect && ignoreSelect.focus(); }
+  }
+  function closeModal() {
+    if (modal) modal.hidden = true;
+  }
+  if (form) {
+    form.addEventListener('submit', function(e) {
+      if (statusSelect && statusSelect.value === 'ignored' && modal) {
+        e.preventDefault();
+        openModal();
+      }
+    });
+  }
+  if (modal && document.getElementById('ignore-reason-form')) {
+    document.getElementById('ignore-reason-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      if (!ignoreSelect || !ignoreSelect.value) return;
+      var reasonText = optionsByValue[ignoreSelect.value] || ignoreSelect.value;
+      var extraText = (extraInput && extraInput.value) ? extraInput.value.trim() : '';
+      var notes = reasonText + (extraText ? '\n' + extraText : '');
+      if (notesInput) notesInput.value = notes;
+      closeModal();
+      if (form) form.submit();
+    });
+  }
+  if (document.getElementById('ignore-modal-cancel')) {
+    document.getElementById('ignore-modal-cancel').addEventListener('click', closeModal);
+  }
+  if (modal) {
+    modal.addEventListener('click', function(e) {
+      if (e.target === modal) closeModal();
+    });
+  }
+})();
+</script>
+{% endblock %}

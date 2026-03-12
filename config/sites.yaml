@@ -1,0 +1,28 @@
+# 各站 URL、选择器，参数（可随站点改版更新）
+# 策略：列表页 ID 提取 + 详情页直连（RSS 已下线）
+
+upwork:
+  base_url: "https://www.upwork.com"
+  search_path: "/nx/search/jobs/"
+  search_params:
+    sort: recency
+  # 列表页：任务卡片（提取含 ~Job_ID 的 URL）
+  list_item_selector: "[data-test='job-tile']"
+  # 详情页直连路径（避免点击弹窗导致加载失败）
+  details_path: "/nx/search/jobs/details/"
+  # 详情页字段选择器
+  detail_selectors:
+    title: "h1, [data-test='job-details-header'] h1"
+    posted_on: "span[data-test='posted-on']"
+    description: ".job-description"
+    job_info_list: "ul.job-info-list"
+  request:
+    delay_min: 5
+    delay_max: 15
+    timeout_ms: 60000
+    # 详情页之间延迟（秒）
+    detail_delay_min: 3
+    detail_delay_max: 8
+  wait_manual_verify_ms: 180000
+  headless: true
+  rss_feed_urls: []
