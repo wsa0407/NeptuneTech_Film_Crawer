@@ -29,15 +29,20 @@ def run_crawl_and_push(
     skip_telegram: bool,
     max_leads: int | None = None,
     clear: bool = False,
+    from_date: str | None = None,
+    to_date: str | None = None,
 ) -> int:
-    """执行抓取并在有配置时推送 Telegram。max_leads 仅首次爬取时生效（默认 100）。clear=True 时先清空历史再爬。返回 0 表示成功。"""
+    """执行抓取并在有配置时推送 Telegram。Upwork 需传入 from_date / to_date（发布时间范围）。clear=True 时先清空历史再爬。返回 0 表示成功。"""
     if clear:
         init_db()
         clear_all_leads()
         logger.info("已清空所有线索、跟进记录与爬取状态，本次将按「首次 100 条」执行")
     all_leads = []
     if platform in ("upwork", "all"):
-        n, leads = crawl_upwork(dry_run=dry_run, max_leads=max_leads)
+        if not from_date or not to_date:
+            logger.error("Upwork 爬虫需要指定发布时间范围，请使用 --from-date 和 --to-date，例如：--from-date 2025-01-01 --to-date 2025-12-31")
+            return 1
+        n, leads = crawl_upwork(from_date=from_date, to_date=to_date, dry_run=dry_run, max_leads=max_leads)
         logger.info("Upwork: %d leads", n)
         all_leads.extend(leads)
         if not dry_run and all_leads:
@@ -97,6 +102,18 @@ def main() -> int:
         action="store_true",
         help="仅清空线索库（leads、跟进记录、爬取状态），不执行抓取",
     )
+    parser.add_argument(
+        "--from-date",
+        metavar="YYYY-MM-DD",
+        default=None,
+        help="Upwork：岗位发布时间起（必填），例如 2025-01-01",
+    )
+    parser.add_argument(
+        "--to-date",
+        metavar="YYYY-MM-DD",
+        default=None,
+        help="Upwork：岗位发布时间止（必填），例如 2025-12-31",
+    )
     args = parser.parse_args()
 
     if args.clear_only:
@@ -108,7 +125,13 @@ def main() -> int:
     platform = args.platform or args.platform_pos or "upwork"
     max_leads = None if args.max_leads == 0 else args.max_leads
     return run_crawl_and_push(
-        platform, args.dry_run, args.no_telegram, max_leads, clear=args.clear
+        platform,
+        args.dry_run,
+        args.no_telegram,
+        max_leads,
+        clear=args.clear,
+        from_date=args.from_date,
+        to_date=args.to_date,
     )
 
 

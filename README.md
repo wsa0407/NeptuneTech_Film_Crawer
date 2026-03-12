@@ -34,17 +34,17 @@ pip install -r requirements.txt
 ## 运行
 
 ```bash
-# 抓取 Upwork，落库 data/leads.db，有 Telegram 配置则推送一条汇总
-python -m src.run upwork
+# 抓取 Upwork（需指定发布时间范围），落库 data/leads.db，有 Telegram 配置则推送一条汇总
+python -m src.run upwork --from-date 2025-01-01 --to-date 2025-12-31
 
 # 试跑不落库、不推送
-python -m src.run upwork --dry-run
+python -m src.run upwork --from-date 2025-01-01 --to-date 2025-12-31 --dry-run
 
 # 抓取但不推送到 Telegram
-python -m src.run upwork --no-telegram
+python -m src.run upwork --from-date 2025-01-01 --to-date 2025-12-31 --no-telegram
 
 # 清空历史后重新抓取（首次 100 条）
-python -m src.run upwork --clear
+python -m src.run upwork --from-date 2025-01-01 --to-date 2025-12-31 --clear
 ```
 
 **定时抓取**：用 crontab 或 systemd timer 每天执行一次，例如：
@@ -78,7 +78,7 @@ python -m src.web.app
 
 ## 当前实现
 
-- **Upwork**：Apify Actor（the-empire-strikes-back/upwork-scraper），按关键词搜索、合并去重、首次 100 条/之后增量，写入 `leads` 表。见 [docs/PRD/PRD-Upwork-Crawler-v1.md](docs/PRD/PRD-Upwork-Crawler-v1.md)、[v2 摘要](docs/PRD/PRD-Upwork-Crawler-v2.md)。
+- **Upwork**：Apify Actor（`YdYsB7rsRY0EUb1lP`），发布时间范围由每次运行时 `--from-date/--to-date` 指定；关键词「AI-Generated Video」匹配 Skills；预算时薪≥30 或 固定≥1200。逻辑细节见 [docs/CRAWLER_LOGIC_UPWORK.md](docs/CRAWLER_LOGIC_UPWORK.md)。
 - **Telegram**：推送一条汇总（完成时间、线索数量、soraplayground.com 链接）。
 - **V3 网站**：见 [docs/PRD/PRD-V3-Leads-Website-CRM.md](docs/PRD/PRD-V3-Leads-Website-CRM.md)。
 - Backstage、LinkedIn 未实现；`--platform backstage/linkedin` 会提示未实现。

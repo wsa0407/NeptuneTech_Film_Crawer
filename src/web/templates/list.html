@@ -51,7 +51,7 @@
         {% for lead in leads %}
         <tr>
           <td class="col-time">{{ lead.published_fmt }}</td>
-          <td class="col-budget">{{ lead.budget_signal or lead.salary_raw or '—' }}</td>
+          <td class="col-budget">{{ lead.budget_fmt or '—' }}</td>
           <td class="col-title"><a href="{{ url_for('lead_detail', lead_id=lead.id, next=return_to_list) }}">{% if lead.title %}{{ lead.title | safe }}{% else %}—{% endif %}</a></td>
           {% if section_key == 'ignored' %}
           <td class="core-desc core-desc-ignored" title="{{ lead.follow_up_notes or '' }}">{{ lead.follow_up_notes or '—' }}</td>

@@ -1,6 +1,11 @@
 # Upwork 抓取策略说明
 
-> 当前 Upwork 实现采用 **Apify Actor**（`src/crawlers/upwork.py`），下文为列表页+详情页直连的备用/历史策略说明。
+> 当前 Upwork 实现采用 **Apify Actor**（`src/crawlers/upwork.py`）。
+>
+> - **运行/调用方式**：以 README 和 `src/run.py --help` 为准
+> - **爬虫内部逻辑**：见 [docs/CRAWLER_LOGIC_UPWORK.md](CRAWLER_LOGIC_UPWORK.md)
+>
+> 下文保留为「列表页 + 详情页直连」的备用/历史策略说明（供排查或回退参考）。
 
 ## 一、当前流程（列表页 ID 提取 + 详情页直连）
 

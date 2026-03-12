@@ -4,6 +4,7 @@ V3 线索收录网站：登录、列表、筛选、详情、跟进（状态/备�
 """
 import os
 import sys
+import re
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -84,6 +85,41 @@ def _core_desc(lead):
         return str(s).strip()
     desc = (lead.get("description") or "").strip()
     return (desc[:30] + "…") if len(desc) > 30 else (desc or "—")
+
+
+def _extract_amounts(text: str) -> list[str]:
+    """从字符串中提取金额数字（如 '$30-$50/hr' -> ['30', '50']）。"""
+    if not text:
+        return []
+    s = str(text)
+    return re.findall(r"\d+(?:\.\d+)?", s)
+
+
+def _budget_fmt(lead: dict) -> str:
+    """预算展示：时薪 '时薪 min-max'；固定 '固定 amount'。兼容旧数据字符串。"""
+    extra = lead.get("extra") or {}
+
+    # 优先从 extra 里取（Upwork 爬虫会写 hourly_range / fixed_budget）
+    hourly_raw = (extra.get("hourly_range") or "").strip() if isinstance(extra.get("hourly_range"), str) else ""
+    fixed_raw = (extra.get("fixed_budget") or "").strip() if isinstance(extra.get("fixed_budget"), str) else ""
+
+    # 回退到 lead 字段
+    raw = (lead.get("budget_signal") or lead.get("salary_raw") or "").strip()
+
+    # 时薪：取两个数字作为 min/max
+    nums = _extract_amounts(hourly_raw) or (_extract_amounts(raw) if ("时薪" in raw or "/hr" in raw or "hour" in raw.lower()) else [])
+    if len(nums) >= 2:
+        return f"时薪 {nums[0]}~{nums[1]}"
+    if len(nums) == 1 and ("时薪" in raw or "/hr" in raw or "hour" in raw.lower()):
+        # 只有一个数字时不确定区间，仍按时薪单值展示
+        return f"时薪 {nums[0]}"
+
+    # 固定：取第一个数字
+    nums = _extract_amounts(fixed_raw) or _extract_amounts(raw)
+    if nums:
+        return f"固定 {nums[0]}"
+
+    return "—"
 
 
 def _format_time(iso_str):
@@ -178,6 +214,7 @@ def _list_view(section_key: str):
     )
     for lead in leads:
         lead["core_desc"] = _core_desc(lead)
+        lead["budget_fmt"] = _budget_fmt(lead)
         lead["published_fmt"] = _format_time(lead.get("published_at"))
         lead["crawled_fmt"] = _format_time(lead.get("crawled_at"))
         if lead.get("title"):
@@ -290,6 +327,7 @@ def lead_detail(lead_id):
     extra = lead.get("extra") or {}
     summary = (extra.get("core_summary") or "").strip()
     lead["core_desc"] = summary if summary else "—"
+    lead["budget_fmt"] = _budget_fmt(lead)
     lead["published_fmt"] = _format_time(lead.get("published_at"))
     lead["crawled_fmt"] = _format_time(lead.get("crawled_at"))
     if lead.get("title"):

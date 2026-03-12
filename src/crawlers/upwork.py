@@ -1,6 +1,7 @@
 """
 Upwork 定向采集器（Apify 模式）。
-通过 Apify Actor the-empire-strikes-back/upwork-scraper 抓取 Upwork 职位，按关键词列表逐条搜索、合并去重后入库并支持 Telegram 推送。
+使用 Apify Actor YdYsB7rsRY0EUb1lP：按发布时间范围（每次运行前由用户输入）、
+关键词「AI-Generated Video」匹配 Skills、预算时薪≥30 或 固定≥1200 抓取并入库。
 需在 .env 中配置 APIFY_API_TOKEN。
 """
 import html as html_module
@@ -16,7 +17,7 @@ from src.storage.store import init_db, get_last_crawl_at
 logger = logging.getLogger(__name__)
 
 PLATFORM = "upwork"
-APIFY_ACTOR_ID = "the-empire-strikes-back/upwork-scraper"
+APIFY_ACTOR_ID = "YdYsB7rsRY0EUb1lP"
 
 
 def _strip_html(text: str | None, preserve_newlines: bool = False) -> str:
@@ -51,23 +52,27 @@ def _extract_job_id_from_url(url: str) -> str:
 
 
 def _detail_url_direct(job_id: str, base_url: str = "https://www.upwork.com") -> str:
-    """详情页直连 URL：/nx/search/jobs/details/~{job_id}"""
+    """详情页直连 URL：https://www.upwork.com/jobs/~02{uid}（与 Apify 返回格式一致）"""
     base_url = base_url.rstrip("/")
-    return f"{base_url}/nx/search/jobs/details/~{job_id}"
+    return f"{base_url}/jobs/~02{job_id}"
 
 
 def _lead_from_apify_item(item: dict[str, Any], base_url: str) -> dict[str, Any] | None:
-    """将 Apify Actor 输出的一条 item 转为 lead。Actor 输出为 snake_case：description_text, publish_time, budget_total_usd 等。"""
+    """将 Apify Actor 输出的一条 item 转为 lead。兼容 snake_case 与 camelCase。"""
     url = (item.get("url") or item.get("jobUrl") or item.get("link") or "").strip()
-    job_id = (item.get("job_id") or "").strip() or (_extract_job_id_from_url(url) if url else "")
+    # 新 Actor：优先用 Uid 作为唯一标识，落库 id 必须为 upwork_{Uid}
+    uid_raw = item.get("Uid") or item.get("uid") or item.get("UID")
+    uid = str(uid_raw).strip() if uid_raw is not None else ""
+    job_id = uid or (item.get("job_id") or item.get("jobId") or "").strip() or (_extract_job_id_from_url(url) if url else "")
     if not job_id:
-        job_id = (item.get("jobId") or item.get("id") or "").strip()
+        job_id = (str(item.get("id")).strip() if item.get("id") is not None else "")
     title = (item.get("title") or item.get("jobTitle") or item.get("name") or "").strip()
     title = _strip_html(title)
     if not title or len(title) < 2:
         return None
     description = (
         item.get("description_text")
+        or item.get("descriptionText")
         or item.get("description")
         or item.get("snippet")
         or item.get("body")
@@ -77,18 +82,29 @@ def _lead_from_apify_item(item: dict[str, Any], base_url: str) -> dict[str, Any]
         description = _strip_html(description, preserve_newlines=True)
     else:
         description = ""
+    # 预算：新 Actor 可能返回 budget.fixedBudget 与 budget.hourlyRate{min,max}
     hourly_str = ""
-    lo, hi = item.get("budget_hourly_min_usd"), item.get("budget_hourly_max_usd")
-    if lo is not None and hi is not None:
-        hourly_str = f"${lo}-${hi}/hr"
-    elif lo is not None:
-        hourly_str = f"${lo}/hr"
-    elif hi is not None:
-        hourly_str = f"${hi}/hr"
     fixed_str = ""
-    total = item.get("budget_total_usd")
-    if total is not None:
-        fixed_str = f"${total}"
+    budget_obj = item.get("budget") if isinstance(item.get("budget"), dict) else {}
+    fixed_budget = budget_obj.get("fixedBudget") if isinstance(budget_obj, dict) else None
+    hourly_rate = budget_obj.get("hourlyRate") if isinstance(budget_obj, dict) else None
+    if isinstance(hourly_rate, dict):
+        lo = hourly_rate.get("min")
+        hi = hourly_rate.get("max")
+    else:
+        lo = item.get("budget_hourly_min_usd") or item.get("budgetHourlyMinUsd")
+        hi = item.get("budget_hourly_max_usd") or item.get("budgetHourlyMaxUsd")
+    if fixed_budget is None:
+        fixed_budget = item.get("budget_total_usd") or item.get("budgetTotalUsd") or item.get("fixedPrice")
+    if fixed_budget is not None:
+        fixed_str = str(fixed_budget).strip()
+    if lo is not None or hi is not None:
+        lo_s = str(lo).strip() if lo is not None else ""
+        hi_s = str(hi).strip() if hi is not None else ""
+        if lo_s and hi_s:
+            hourly_str = f"{lo_s}-{hi_s}"
+        else:
+            hourly_str = lo_s or hi_s or ""
     if not hourly_str and not fixed_str:
         budget_raw = (
             item.get("budget")
@@ -102,11 +118,12 @@ def _lead_from_apify_item(item: dict[str, Any], base_url: str) -> dict[str, Any]
         if budget_raw:
             fixed_str = str(budget_raw).strip()
     parts = []
-    if hourly_str:
-        parts.append(f"时薪 {hourly_str}")
     if fixed_str:
         parts.append(f"固定 {fixed_str}")
-    budget_str = " | ".join(parts) if parts else (fixed_str or hourly_str or "")
+    elif hourly_str:
+        parts.append(f"时薪 {hourly_str}")
+    budget_str = " | ".join(parts) if parts else ""
+    # 直达链接：优先使用接口返回的链接
     source_url = url or _detail_url_direct(job_id, base_url)
     posted = (
         item.get("publish_time")
@@ -137,11 +154,16 @@ def _lead_from_apify_item(item: dict[str, Any], base_url: str) -> dict[str, Any]
         extra["hourly_range"] = hourly_str
     if fixed_str:
         extra["fixed_budget"] = fixed_str
+    publisher_raw = item.get("clientName") or item.get("client")
+    if isinstance(publisher_raw, dict):
+        publisher = (publisher_raw.get("name") or publisher_raw.get("title") or "").strip() or "—"
+    else:
+        publisher = (str(publisher_raw).strip() if publisher_raw else "") or "—"
     return _make_lead(
-        job_id=job_id or f"apify_{hash(url) % 10**10}",
+        job_id=job_id or str(abs(hash(url)) % 10**12),
         title=title,
         source_url=source_url,
-        publisher=(item.get("clientName") or item.get("client") or "—").strip() or "—",
+        publisher=publisher,
         description=description,
         budget_signal=budget_str,
         extra=extra,
@@ -198,12 +220,8 @@ def _make_lead(
     }
 
 
-# 首次爬取条数（无历史时）
-FIRST_RUN_MAX_LEADS = 100
-# 增量时每类搜索拉取条数（用于筛出「上次至今」的增量）
-INCREMENTAL_PER_QUERY_ITEMS = 40
-# 首次爬取时每轮 Apify 请求条数（多拉一些以便筛出足够「时薪≥30 或 固定≥1000」的线索，Actor 单页约 50）
-FIRST_RUN_ITEMS_PER_REQUEST = 50
+# 单次运行默认拉取条数
+DEFAULT_MAX_LEADS = 100
 # 预算筛选：只保留「时薪≥30 或 固定≥1000」的线索（与 Apify 请求参数一致，本地二次校验）
 HOURLY_RATE_MIN_USD = 30
 FIXED_PRICE_MIN_USD = 1000
@@ -211,34 +229,70 @@ FIXED_PRICE_MIN_USD = 1000
 
 def _meets_budget_filter(item: dict[str, Any]) -> bool:
     """Apify 返回的 item 是否满足预算条件：时薪≥30 或 固定≥1000。无预算字段时保留（信任 Apify 已过滤）。"""
-    hourly_min = item.get("budget_hourly_min_usd")
+    hourly_min = item.get("budget_hourly_min_usd") or item.get("budgetHourlyMinUsd")
     if hourly_min is not None:
         try:
             if float(hourly_min) >= HOURLY_RATE_MIN_USD:
                 return True
         except (TypeError, ValueError):
             pass
-    total = item.get("budget_total_usd")
+    total = item.get("budget_total_usd") or item.get("budgetTotalUsd") or item.get("fixedPrice")
     if total is not None:
         try:
             if float(total) >= FIXED_PRICE_MIN_USD:
                 return True
         except (TypeError, ValueError):
             pass
-    # 无任何预算字段时保留，避免误删（Apify 已按 hourlyRateMin/fixedPriceMin 请求）
     if hourly_min is None and total is None:
         return True
     return False
 
 
-def crawl_upwork(dry_run: bool = False, max_leads: int | None = None) -> tuple[int, list[dict[str, Any]]]:
+def _build_run_input(from_date: str, to_date: str, limit: int) -> dict[str, Any]:
+    """构建新 Actor (YdYsB7rsRY0EUb1lP) 的 run_input（按用户提供的字段集合）。"""
+    return {
+        "addons.enableClientActivity": False,
+        "addons.enableClientDetails": False,
+        "addons.enableJobAttachments": False,
+        "budget.allowUnspecifiedBudget": False,
+        "budget.fixedPrice.min": "1000",
+        "budget.hourlyRate.min": "30",
+        "budget.minClientHireRate": 0,
+        "budget.noAvgHourlyRatePaid": False,
+        "budget.noHireRate": False,
+        "budget.onlyContractToHire": False,
+        "client.includeWithNoFeedback": False,
+        "client.paymentMethodVerified": False,
+        "client.phoneNumberVerified": False,
+        "excludeKeywords.matchDescription": True,
+        "excludeKeywords.matchSkills": True,
+        "excludeKeywords.matchTitle": True,
+        "fromDate": from_date,
+        "includeKeywords.keywords": ["AI-Generated Video"],
+        "includeKeywords.matchDescription": False,
+        "includeKeywords.matchSkills": True,
+        "includeKeywords.matchTitle": False,
+        "limit": limit,
+        "notifications.limit": 3,
+        "notifications.shouldSendRunMetadata": True,
+        "toDate": to_date,
+        "vendor.excludeWithQuestions": False,
+        "vendor.includeFeatured": False,
+        "vendor.includeWithoutCountryPreference": False,
+    }
+
+
+def crawl_upwork(
+    from_date: str,
+    to_date: str,
+    dry_run: bool = False,
+    max_leads: int | None = None,
+) -> tuple[int, list[dict[str, Any]]]:
     """
-    执行 Upwork 抓取（仅 Apify 模式）。
-    - 只保留「时薪≥30 或 固定≥1000」的线索：拿到 Apify 结果后先做本地预算校验，通过才入库；首次爬取以「装满 cap 条有效线索」为目标，持续拉取直到满或数据用完。
-    - 首次（无 last_crawl_at）：目标 100 条有效线索，每轮请求较多条数，校验后去重，装满 100 才停止。
-    - 之后每次：只保留「发布时间在上次爬取～本次爬取之间」的增量，去重后入库并更新 last_crawl_at。
-    需在 .env 中配置 APIFY_API_TOKEN。
-    max_leads: 仅首次生效时作为目标条数（默认 100）；增量时不限制条数。
+    执行 Upwork 抓取（新 Apify Actor YdYsB7rsRY0EUb1lP）。
+    - 发布时间范围：由调用方传入 from_date / to_date（每次爬虫前用户输入）。
+    - 关键词：AI-Generated Video，匹配 Skills。
+    - 预算：时薪≥30 或 固定≥1000，API 与本地双重过滤。
     返回 (本次条数, 线索列表)。
     """
     apify_token = (os.environ.get("APIFY_API_TOKEN") or "").strip()
@@ -246,11 +300,10 @@ def crawl_upwork(dry_run: bool = False, max_leads: int | None = None) -> tuple[i
         logger.warning("未配置 APIFY_API_TOKEN，跳过 Upwork 抓取。请在 .env 中配置后重试。")
         return 0, []
 
-    keywords = load_yaml("keywords.yaml")
-    queries = (keywords.get("upwork") or {}).get("search_queries") or [
-        "AI Short Drama",
-        "AI Mini Series",
-    ]
+    # 不限制条数：传较大 limit，由 Apify 返回日期范围内所有符合筛选条件的结果
+    limit = 1000
+    run_input = _build_run_input(from_date, to_date, limit)
+
     sites = load_yaml("sites.yaml")
     site_config = (sites.get("upwork") or {}).copy()
     base_url = site_config.get("base_url", "https://www.upwork.com")
@@ -262,92 +315,44 @@ def crawl_upwork(dry_run: bool = False, max_leads: int | None = None) -> tuple[i
         return 0, []
 
     init_db()
-    last_iso = get_last_crawl_at(PLATFORM)
-    is_first_run = last_iso is None
-    now_dt = datetime.now(timezone.utc)
-    now_iso = now_dt.isoformat()
-    last_dt = datetime.fromisoformat(last_iso.replace("Z", "+00:00")) if last_iso else None
-
-    if is_first_run:
-        cap = max_leads if max_leads is not None else FIRST_RUN_MAX_LEADS
-        per_query = FIRST_RUN_ITEMS_PER_REQUEST
-        logger.info(
-            "使用 Apify 模式（Actor: %s），首次爬取，目标 %d 条有效线索（时薪≥30 或 固定≥1000），每轮请求 %d 条",
-            APIFY_ACTOR_ID, cap, per_query,
-        )
-    else:
-        cap = None
-        per_query = INCREMENTAL_PER_QUERY_ITEMS
-        logger.info("使用 Apify 模式（Actor: %s），增量爬取（发布时间 >= %s）", APIFY_ACTOR_ID, last_iso)
+    logger.info(
+        "Apify Actor %s：fromDate=%s toDate=%s limit=%d（不限制条数），关键词 AI-Generated Video (Skills)，时薪≥30 或 固定≥1000",
+        APIFY_ACTOR_ID, from_date, to_date, limit,
+    )
 
     all_leads = []
     seen = set()
-
     try:
         client = ApifyClient(apify_token)
-        for i, q in enumerate(queries):
-            if cap is not None and len(all_leads) >= cap:
-                break
-            for run_label, run_input in [
-                (
-                    "时薪≥30",
-                    {
-                        "searchQuery": q,
-                        "maxItems": per_query,
-                        "hourlyRateMin": 30,
-                        "location": ["worldwide", ""],
-                    },
-                ),
-                (
-                    "固定≥1000",
-                    {
-                        "searchQuery": q,
-                        "maxItems": per_query,
-                        "fixedPriceMin": 1000,
-                        "location": ["worldwide", ""],
-                    },
-                ),
-            ]:
-                if cap is not None and len(all_leads) >= cap:
-                    break
-                logger.info("Apify 搜索 (%d/%d): %s [%s]", i + 1, len(queries), q, run_label)
-                run = client.actor(APIFY_ACTOR_ID).call(run_input=run_input)
-                dataset_id = run.get("defaultDatasetId")
-                if not dataset_id:
-                    continue
-                items = client.dataset(dataset_id).list_items().items
-                for item in items:
-                    if not _meets_budget_filter(item):
-                        continue
-                    lead = _lead_from_apify_item(item, base_url)
-                    if not lead or lead["id"] in seen:
-                        continue
-                    seen.add(lead["id"])
-                    if is_first_run:
-                        all_leads.append(lead)
-                        if cap is not None and len(all_leads) >= cap:
-                            break
-                    else:
-                        pub_dt = _parse_published_at(lead.get("published_at"))
-                        if pub_dt is None or (last_dt <= pub_dt <= now_dt):
-                            all_leads.append(lead)
-                if cap is not None and len(all_leads) >= cap:
-                    break
-            if cap is not None and len(all_leads) >= cap:
-                break
-        logger.info(
-            "Apify 多关键词共返回去重且满足预算的 %d 条%s",
-            len(all_leads),
-            "（已满目标）" if (cap is not None and len(all_leads) >= cap) else "",
-        )
+        run = client.actor(APIFY_ACTOR_ID).call(run_input=run_input)
+        dataset_id = run.get("defaultDatasetId")
+        if not dataset_id:
+            logger.warning("Actor 未返回 defaultDatasetId")
+            return 0, []
+        items = list(client.dataset(dataset_id).iterate_items())
+        first_item = items[0] if items else None
+        for item in items:
+            if not _meets_budget_filter(item):
+                continue
+            lead = _lead_from_apify_item(item, base_url)
+            if not lead or lead["id"] in seen:
+                continue
+            seen.add(lead["id"])
+            all_leads.append(lead)
+        logger.info("Apify 返回去重且满足预算的 %d 条", len(all_leads))
+        if items and not all_leads and first_item is not None:
+            logger.warning(
+                "Actor 返回 %d 条 item 但过滤后为 0，首条 item 的键供核对字段: %s",
+                len(items),
+                list(first_item.keys()) if isinstance(first_item, dict) else type(first_item).__name__,
+            )
     except Exception as e:
         logger.exception("Apify 运行失败: %s", e)
         all_leads = []
 
-    out = all_leads[:cap] if cap is not None else all_leads
     if dry_run:
-        logger.info("Dry run: would save %d leads", len(out))
-        return len(out), out
-    if not out:
+        logger.info("Dry run: would save %d leads", len(all_leads))
+        return len(all_leads), all_leads
+    if not all_leads:
         return 0, []
-    return len(out), out
+    return len(all_leads), all_leads

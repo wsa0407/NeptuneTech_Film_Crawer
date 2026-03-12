@@ -9,7 +9,7 @@
     <dt>发布方</dt><dd>{{ lead.publisher or '—' }}</dd>
     <dt>发布时间</dt><dd>{{ lead.published_fmt }}</dd>
     <dt>抓取时间</dt><dd>{{ lead.crawled_fmt }}</dd>
-    <dt>预算</dt><dd>{{ lead.budget_signal or lead.salary_raw or '—' }}</dd>
+    <dt>预算</dt><dd>{{ lead.budget_fmt or '—' }}</dd>
     <dt>核心描述</dt><dd class="core-desc">{{ lead.core_desc }}</dd>
     {% if lead.source_url %}
     <dt>直达链接</dt><dd><a href="{{ lead.source_url }}" target="_blank" rel="noopener">{{ lead.source_url }}</a></dd>
