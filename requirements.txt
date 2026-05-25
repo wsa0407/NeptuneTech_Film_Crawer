@@ -3,7 +3,8 @@ pyyaml>=6.0
 python-dotenv>=1.0.0
 APScheduler>=3.10.0
 apify-client>=1.6.0
-openai>=1.0
+# gemini_summary 使用 client.responses.create（火山方舟兼容），需 >=1.70
+openai>=1.70
 flask>=3.0
 # 生产环境 Web 服务
 gunicorn>=22.0

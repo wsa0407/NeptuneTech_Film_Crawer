@@ -20,6 +20,7 @@
     <h2>跟进</h2>
     <form id="detail-follow-up-form" method="post" action="{{ url_for('save_follow_up', lead_id=lead.id) }}">
       {% if return_to %}<input type="hidden" name="next" value="{{ return_to }}">{% endif %}
+      <input type="hidden" name="communication_time" id="detail-communication-time" value="">
       <label>状态
         <select name="status" id="detail-status-select" data-original-status="{{ lead.follow_up.status }}">
           {% for val, label in status_choices %}
@@ -60,10 +61,28 @@
     </form>
   </div>
 </div>
+<div id="communication-time-modal" class="modal-overlay" role="dialog" aria-labelledby="communication-time-title" aria-modal="true" hidden>
+  <div class="modal-card">
+    <h3 id="communication-time-title" class="modal-title">填写沟通时间</h3>
+    <form id="communication-time-form" class="modal-form">
+      <label>
+        沟通时间 <span class="required">*</span>
+        <input id="communication-time-input" type="datetime-local" required>
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" id="communication-time-cancel">取消</button>
+        <button type="submit" class="btn btn-primary" id="communication-time-confirm">确定</button>
+      </div>
+    </form>
+  </div>
+</div>
 <script>
 (function() {
   var form = document.getElementById('detail-follow-up-form');
   var modal = document.getElementById('ignore-reason-modal');
+  var commModal = document.getElementById('communication-time-modal');
+  var commInput = document.getElementById('communication-time-input');
+  var commHidden = document.getElementById('detail-communication-time');
   var ignoreSelect = modal ? modal.querySelector('#ignore-reason-select') : null;
   var extraInput = modal ? modal.querySelector('#ignore-reason-extra') : null;
   var statusSelect = form ? form.querySelector('#detail-status-select') : null;
@@ -79,14 +98,37 @@
     if (extraInput) extraInput.value = '';
     if (modal) { modal.hidden = false; ignoreSelect && ignoreSelect.focus(); }
   }
+  function openCommunicationModal() {
+    if (commInput) commInput.value = '';
+    if (commModal) { commModal.hidden = false; commInput && commInput.focus(); }
+  }
   function closeModal() {
     if (modal) modal.hidden = true;
+  }
+  function closeCommunicationModal() {
+    if (commModal) commModal.hidden = true;
+  }
+  function resetStatusToOriginal() {
+    if (statusSelect) {
+      var orig = statusSelect.getAttribute('data-original-status') || 'pending';
+      statusSelect.value = orig;
+    }
   }
   if (form) {
     form.addEventListener('submit', function(e) {
       if (statusSelect && statusSelect.value === 'ignored' && modal) {
         e.preventDefault();
         openModal();
+        return;
+      }
+      if (
+        statusSelect &&
+        statusSelect.getAttribute('data-original-status') === 'following' &&
+        statusSelect.value === 'converted' &&
+        commModal
+      ) {
+        e.preventDefault();
+        openCommunicationModal();
       }
     });
   }
@@ -99,15 +141,50 @@
       var notes = reasonText + (extraText ? '\n' + extraText : '');
       if (notesInput) notesInput.value = notes;
       closeModal();
+      closeCommunicationModal();
+      if (form) form.submit();
+    });
+  }
+  if (commModal && document.getElementById('communication-time-form')) {
+    document.getElementById('communication-time-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      if (!commInput || !commInput.value) return;
+      if (commHidden) commHidden.value = commInput.value;
+      closeCommunicationModal();
+      closeModal();
       if (form) form.submit();
     });
   }
   if (document.getElementById('ignore-modal-cancel')) {
-    document.getElementById('ignore-modal-cancel').addEventListener('click', closeModal);
+    document.getElementById('ignore-modal-cancel').addEventListener('click', function() {
+      closeModal();
+      closeCommunicationModal();
+      resetStatusToOriginal();
+    });
+  }
+  if (document.getElementById('communication-time-cancel')) {
+    document.getElementById('communication-time-cancel').addEventListener('click', function() {
+      closeCommunicationModal();
+      closeModal();
+      resetStatusToOriginal();
+    });
   }
   if (modal) {
     modal.addEventListener('click', function(e) {
-      if (e.target === modal) closeModal();
+      if (e.target === modal) {
+        closeModal();
+        closeCommunicationModal();
+        resetStatusToOriginal();
+      }
+    });
+  }
+  if (commModal) {
+    commModal.addEventListener('click', function(e) {
+      if (e.target === commModal) {
+        closeCommunicationModal();
+        closeModal();
+        resetStatusToOriginal();
+      }
     });
   }
 })();

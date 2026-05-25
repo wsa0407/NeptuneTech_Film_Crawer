@@ -300,8 +300,8 @@ def crawl_upwork(
         logger.warning("未配置 APIFY_API_TOKEN，跳过 Upwork 抓取。请在 .env 中配置后重试。")
         return 0, []
 
-    # 不限制条数：传较大 limit，由 Apify 返回日期范围内所有符合筛选条件的结果
-    limit = 1000
+    # limit 由 Apify 返回日期范围内符合筛选条件的结果（当前 limit=3000）
+    limit = 3000
     run_input = _build_run_input(from_date, to_date, limit)
 
     sites = load_yaml("sites.yaml")
@@ -316,7 +316,7 @@ def crawl_upwork(
 
     init_db()
     logger.info(
-        "Apify Actor %s：fromDate=%s toDate=%s limit=%d（不限制条数），关键词 AI-Generated Video (Skills)，时薪≥30 或 固定≥1000",
+        "Apify Actor %s：fromDate=%s toDate=%s limit=%d，关键词 AI-Generated Video (Skills)，时薪≥30 或 固定≥1000",
         APIFY_ACTOR_ID, from_date, to_date, limit,
     )
 

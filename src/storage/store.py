@@ -285,7 +285,8 @@ def list_leads(
         join = ""
     from_clause = " FROM leads " + join
     if order_by == "published_at":
-        order_sql = " ORDER BY leads.published_at IS NULL, leads.published_at DESC"
+        asc = order_dir.lower() == "asc"
+        order_sql = " ORDER BY leads.published_at IS NULL, leads.published_at ASC" if asc else " ORDER BY leads.published_at IS NULL, leads.published_at DESC"
     else:
         order_sql = " ORDER BY leads.crawled_at DESC"
     with sqlite3.connect(str(path)) as conn:

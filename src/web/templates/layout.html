@@ -20,8 +20,8 @@
       <nav class="nav header-center">
         <a href="{{ url_for('overview') }}" class="nav-link {% if section_key is defined and section_key == 'overview' %}active{% endif %}">线索总览</a>
         <a href="{{ url_for('pending') }}" class="nav-link {% if section_key is defined and section_key == 'pending' %}active{% endif %}">待处理</a>
-        <a href="{{ url_for('following') }}" class="nav-link {% if section_key is defined and section_key == 'following' %}active{% endif %}">跟进中</a>
-        <a href="{{ url_for('converted') }}" class="nav-link {% if section_key is defined and section_key == 'converted' %}active{% endif %}">已转化</a>
+        <a href="{{ url_for('following') }}" class="nav-link {% if section_key is defined and section_key == 'following' %}active{% endif %}">有效线索</a>
+        <a href="{{ url_for('converted') }}" class="nav-link {% if section_key is defined and section_key == 'converted' %}active{% endif %}">沟通中</a>
         <a href="{{ url_for('ignored') }}" class="nav-link {% if section_key is defined and section_key == 'ignored' %}active{% endif %}">已忽略</a>
       </nav>
       <div class="header-right">

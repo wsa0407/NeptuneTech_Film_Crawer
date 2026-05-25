@@ -17,7 +17,7 @@
 
 由 `_build_run_input(from_date, to_date, limit)` 构建，关键字段如下：
 
-- **条数**：`limit`（当前为 10000，不限制条数，由 Actor 返回日期范围内所有符合条件的结果）
+- **条数**：`limit`（当前为 3000）
 - **发布时间**：`fromDate` / `toDate`
 - **关键词（只匹配技能）**
   - `includeKeywords.keywords = ["AI-Generated Video"]`
@@ -35,7 +35,7 @@
 
 1. **准备**：
    - 读取 `APIFY_API_TOKEN`，缺失则直接返回 0 条
-   - `limit` 设为 **10000**，不限制条数，只保留符合筛选条件（预算 + 去重）的结果
+   - `limit` 设为 **3000**
    - 读取 `config/sites.yaml` 的 `upwork.base_url`（默认 `https://www.upwork.com`），用于补全详情链接
 2. **调用 Actor**：
    - `client.actor(APIFY_ACTOR_ID).call(run_input=run_input)`

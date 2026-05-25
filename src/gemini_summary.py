@@ -7,6 +7,7 @@ import logging
 import os
 import re
 
+import openai as openai_pkg
 from openai import OpenAI
 
 logger = logging.getLogger(__name__)
@@ -220,6 +221,13 @@ def summarize_description(description: str | None) -> str | None:
     )
     try:
         client = OpenAI(base_url=ARK_BASE_URL, api_key=api_key)
+        if not hasattr(client, "responses"):
+            logger.warning(
+                "火山摘要跳过：openai 包过旧（当前 %s），不支持 client.responses；"
+                "请执行 pip install -U 'openai>=1.70' 后重试。",
+                getattr(openai_pkg, "__version__", "?"),
+            )
+            return None
         response = client.responses.create(
             model=model,
             input=[

@@ -43,8 +43,9 @@
           <th>预算</th>
           <th>标题</th>
           {% if section_key == 'ignored' %}<th>忽略原因</th>{% else %}<th>核心描述</th>{% endif %}
-          <th>状态</th>
-          {% if show_actions %}<th>操作</th>{% endif %}
+          {% if section_key == 'following' %}<th>备注</th>{% endif %}
+          <th class="status-col">状态</th>
+          {% if show_actions %}<th class="action-col">操作</th>{% endif %}
         </tr>
       </thead>
       <tbody>
@@ -58,16 +59,21 @@
           {% else %}
           <td class="core-desc" title="{{ lead.core_desc or '' }}">{{ lead.core_desc or '—' }}</td>
           {% endif %}
+          {% if section_key == 'following' %}
+          <td class="notes-col" title="{{ lead.follow_up_notes or '' }}">{{ lead.follow_up_notes or '—' }}</td>
+          {% endif %}
           <td class="status-cell">
             {% if can_edit_status and status_choices %}
             <form method="post" action="{{ url_for('save_follow_up', lead_id=lead.id) }}" class="status-form" data-lead-id="{{ lead.id }}">
               <input type="hidden" name="notes" value="{{ lead.follow_up_notes or '' }}">
+              <input type="hidden" name="communication_time" value="">
               <input type="hidden" name="next" value="{{ return_to_list }}">
               <select
                 name="status"
                 class="status-select status-{{ lead.status }}"
                 data-original-status="{{ lead.status }}"
                 {% if section_key in ['pending', 'following'] %}data-ignore-with-reason{% endif %}
+                {% if section_key == 'following' %}data-communication-time-required{% endif %}
                 data-status-change-submit
               >
                 {% for val, label in status_choices %}
@@ -166,12 +172,32 @@
   </div>
 </div>
 {% endif %}
+{% if section_key == 'following' and can_edit_status %}
+<div id="communication-time-modal" class="modal-overlay" role="dialog" aria-labelledby="communication-time-title" aria-modal="true" hidden>
+  <div class="modal-card">
+    <h3 id="communication-time-title" class="modal-title">填写沟通时间</h3>
+    <form id="communication-time-form" class="modal-form">
+      <label>
+        沟通时间 <span class="required">*</span>
+        <input id="communication-time-input" type="datetime-local" required>
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" id="communication-time-cancel">取消</button>
+        <button type="submit" class="btn btn-primary" id="communication-time-confirm">确定</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
 <script>
 (function() {
   var modal = document.getElementById('ignore-reason-modal');
+  var commModal = document.getElementById('communication-time-modal');
+  var commInput = commModal ? commModal.querySelector('#communication-time-input') : null;
   var ignoreSelect = modal ? modal.querySelector('#ignore-reason-select') : null;
   var extraInput = modal ? modal.querySelector('#ignore-reason-extra') : null;
   var formToSubmit = null;
+  var pendingStatusValue = null;
   var optionsByValue = {};
   if (ignoreSelect) {
     Array.prototype.forEach.call(ignoreSelect.options, function(opt) {
@@ -180,18 +206,42 @@
   }
   function openModal(form) {
     formToSubmit = form;
+    pendingStatusValue = 'ignored';
     if (ignoreSelect) ignoreSelect.value = '';
     if (extraInput) extraInput.value = '';
     if (modal) { modal.hidden = false; ignoreSelect && ignoreSelect.focus(); }
   }
+  function openCommunicationModal(form) {
+    formToSubmit = form;
+    pendingStatusValue = 'converted';
+    if (commInput) commInput.value = '';
+    if (commModal) { commModal.hidden = false; commInput && commInput.focus(); }
+  }
   function closeModal() {
     if (modal) modal.hidden = true;
+  }
+  function closeCommunicationModal() {
+    if (commModal) commModal.hidden = true;
+  }
+  function resetSelectionToOriginal() {
+    if (formToSubmit) {
+      var sel = formToSubmit.querySelector('[data-status-change-submit]');
+      if (sel) {
+        var orig = sel.getAttribute('data-original-status') || 'pending';
+        sel.value = orig;
+      }
+    }
     formToSubmit = null;
+    pendingStatusValue = null;
   }
   document.querySelectorAll('.status-form select[data-status-change-submit]').forEach(function(sel) {
     sel.addEventListener('change', function() {
       if (this.hasAttribute('data-ignore-with-reason') && this.value === 'ignored' && modal) {
         openModal(this.form);
+        return;
+      }
+      if (this.hasAttribute('data-communication-time-required') && this.value === 'converted' && commModal) {
+        openCommunicationModal(this.form);
         return;
       }
       this.form.submit();
@@ -207,35 +257,60 @@
       var notesInput = formToSubmit.querySelector('input[name=notes]');
       if (notesInput) notesInput.value = notes;
       var statusSelect = formToSubmit.querySelector('select[name=status]');
-      if (statusSelect) statusSelect.value = 'ignored';
+      if (statusSelect) statusSelect.value = pendingStatusValue || 'ignored';
       var f = formToSubmit;
       closeModal();
+      closeCommunicationModal();
+      formToSubmit = null;
+      pendingStatusValue = null;
+      f.submit();
+    });
+  }
+  if (commModal && document.getElementById('communication-time-form')) {
+    document.getElementById('communication-time-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      if (!formToSubmit || !commInput || !commInput.value) return;
+      var timeInput = formToSubmit.querySelector('input[name=communication_time]');
+      if (timeInput) timeInput.value = commInput.value;
+      var statusSelect = formToSubmit.querySelector('select[name=status]');
+      if (statusSelect) statusSelect.value = pendingStatusValue || 'converted';
+      var f = formToSubmit;
+      closeCommunicationModal();
+      closeModal();
+      formToSubmit = null;
+      pendingStatusValue = null;
       f.submit();
     });
   }
   if (document.getElementById('ignore-modal-cancel')) {
     document.getElementById('ignore-modal-cancel').addEventListener('click', function() {
-      if (formToSubmit) {
-        var sel = formToSubmit.querySelector('[data-ignore-with-reason]');
-        if (sel) {
-          var orig = sel.getAttribute('data-original-status') || 'pending';
-          sel.value = orig;
-        }
-      }
       closeModal();
+      closeCommunicationModal();
+      resetSelectionToOriginal();
+    });
+  }
+  if (document.getElementById('communication-time-cancel')) {
+    document.getElementById('communication-time-cancel').addEventListener('click', function() {
+      closeCommunicationModal();
+      closeModal();
+      resetSelectionToOriginal();
     });
   }
   if (modal) {
     modal.addEventListener('click', function(e) {
       if (e.target === modal) {
-        if (formToSubmit) {
-          var sel = formToSubmit.querySelector('[data-ignore-with-reason]');
-          if (sel) {
-            var orig = sel.getAttribute('data-original-status') || 'pending';
-            sel.value = orig;
-          }
-        }
         closeModal();
+        closeCommunicationModal();
+        resetSelectionToOriginal();
+      }
+    });
+  }
+  if (commModal) {
+    commModal.addEventListener('click', function(e) {
+      if (e.target === commModal) {
+        closeCommunicationModal();
+        closeModal();
+        resetSelectionToOriginal();
       }
     });
   }

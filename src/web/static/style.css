@@ -332,14 +332,8 @@ body {
   color: #374151;
 }
 /* 状态列、操作列：表头与内容中线对齐 */
-.table thead th:nth-child(5),
-.table thead th:nth-child(6) {
-  text-align: center;
-}
-.table tbody td:nth-child(5) {
-  text-align: center;
-}
-.table tbody td:nth-child(6) {
+.table thead th.status-col,
+.table thead th.action-col {
   text-align: center;
 }
 .table tbody tr:hover {
@@ -396,6 +390,13 @@ body {
   line-height: 1.2;
   text-overflow: ellipsis;
   overflow: hidden;
+}
+.table .notes-col {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
 }
 
 /* 状态：浅色背景 + 深色文字，圆角胶囊 */

@@ -39,8 +39,8 @@ SECRET_KEY = os.environ.get("WEB_SECRET_KEY", "nep-tune-v3-secret-change-in-prod
 
 STATUS_CHOICES = [
     ("pending", "待处理"),
-    ("following", "跟进中"),
-    ("converted", "已转化"),
+    ("following", "有效线索"),
+    ("converted", "沟通中"),
     ("ignored", "已忽略"),
 ]
 
@@ -57,8 +57,8 @@ IGNORED_REASON_CHOICES = [
 NAV_SECTIONS = [
     ("overview", "线索总览", None, False, None),       # 只读，无操作列
     ("pending", "待处理", "pending", True, ["pending", "following", "ignored"]),
-    ("following", "跟进中", "following", True, ["following", "converted", "ignored"]),
-    ("converted", "已转化", "converted", False, None),
+    ("following", "有效线索", "following", True, ["following", "converted", "ignored"]),
+    ("converted", "沟通中", "converted", False, None),
     ("ignored", "已忽略", "ignored", False, None),
 ]
 
@@ -146,6 +146,32 @@ def _format_time(iso_str):
         return raw[:16] if len(raw) > 16 else raw
 
 
+def _normalize_contact_time(raw: str) -> str | None:
+    """将前端传入的沟通时间标准化为 YYYY-MM-DD HH:MM。"""
+    s = (raw or "").strip()
+    if not s:
+        return None
+    for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            dt = datetime.strptime(s, fmt)
+            return dt.strftime("%Y-%m-%d %H:%M")
+        except Exception:
+            continue
+    return None
+
+
+def _merge_contact_time_into_notes(notes: str, contact_time: str) -> str:
+    """把沟通时间写入备注；若已存在则替换旧值，避免重复。"""
+    line = f"沟通时间：{contact_time}"
+    text = (notes or "").strip()
+    if not text:
+        return line
+    updated = re.sub(r"^沟通时间：.*$", line, text, flags=re.MULTILINE)
+    if updated != text:
+        return updated.strip()
+    return f"{line}\n{text}"
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -209,7 +235,7 @@ def _list_view(section_key: str):
         status_filter=status_filter,
         limit=per_page,
         offset=offset,
-        order_by="published_at" if section_key == "overview" else "crawled_at",
+        order_by="published_at" if section_key in ("overview", "following") else "crawled_at",
         order_dir="desc",
     )
     for lead in leads:
@@ -354,6 +380,14 @@ def save_follow_up(lead_id):
         return "线索不存在", 404
     status = request.form.get("status") or "pending"
     notes = request.form.get("notes") or ""
+    old = get_follow_up(lead_id) or {"status": "pending", "notes": ""}
+    old_status = old.get("status") or "pending"
+    if old_status == "following" and status == "converted":
+        contact_time_raw = request.form.get("communication_time") or ""
+        contact_time = _normalize_contact_time(contact_time_raw)
+        if not contact_time:
+            return "从“有效线索”改为“沟通中”时必须填写沟通时间", 400
+        notes = _merge_contact_time_into_notes(notes, contact_time)
     set_follow_up(lead_id, status, notes)
     # 列表页改状态：跳回当前列表 URL，线索从当前页消失、页面不跳转模块；详情页改状态：跳回 next 所指的来路页面（模块）
     next_url = request.form.get("next") or ""
